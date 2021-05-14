@@ -1,0 +1,648 @@
+---
+title: "EAS RR"
+author: "MZavadskaya"
+date: "02 10 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F, error = FALSE, message = FALSE, warning = FALSE)
+```
+
+#Load data
+
+# Load packages
+```{r}
+#install.packages("sjPlot")
+#install.packages("lme4")
+#install.packages("readxl")
+install.packages("stargazer")
+library(sjPlot)
+library(lme4)
+library(tidyverse)
+library(psych)
+library("readxl")
+library(dplyr)
+library(stargazer)
+library(tidyr)
+library(gridExtra)
+library(ggplot2)
+```
+
+#Load data
+```{r}
+df.sel <- read.csv("df.sel.e2016-2018_v4.csv", header = T, sep = ";", dec = ",")
+names(df.sel)
+# create a new logged income var
+summary(df.sel$logincome <- log(df.sel$budget_executed))
+
+```
+#Add vars
+```{r}
+# MODELS IND ----
+
+df.sel$people_housing_improved_share[df.sel$people_housing_improved_share == 0] <- 0.01
+df.sel$people_housing_log <- log(df.sel$people_housing_improved_share)
+
+df.sel$people_housing_improved_share_2015[df.sel$people_housing_improved_share_2015 == 0] <- 0.01
+df.sel$people_housing_log_2015 <- log(df.sel$people_housing_improved_share_2015)
+
+df.sel$broken_roads[df.sel$broken_roads == 100] <- 99.9
+# df.sel$good_roads <- log(-1*(df.sel$broken_roads - 100))
+df.sel$good_roads <- round((-1 * (df.sel$broken_roads - 100)) / 10, digits = 0)
+df.sel$good_roads[df.sel$good_roads == 0] <- 1
+
+df.sel$broken_roads_2015[df.sel$broken_roads_2015 == 100] <- 99.9
+# df.sel$good_roads <- log(-1*(df.sel$broken_roads - 100))
+df.sel$good_roads_2015 <- round((-1 * (df.sel$broken_roads_2015 - 100)) / 10, digits = 0)
+df.sel$good_roads_2015[df.sel$good_roads_2015 == 0] <- 1
+
+
+df.sel$broken_roads <- (df.sel$broken_roads-100)*-1
+df.sel$kindergardens_repair <- (df.sel$kindergardens_repair-100)*-1
+df.sel$kids_kindergarden_share[df.sel$kids_kindergarden_share == 0] <- NA
+df.sel$model_lo <- factor(df.sel$model, levels = c("election", "contract", "competition"))
+
+df.sel$broken_roads_2015 <- (df.sel$broken_roads_2015-100)*-1
+df.sel$kindergardens_repair_2015 <- (df.sel$kindergardens_repair_2015-100)*-1
+#df.sel$kids_kindergarden_share_2015[df.sel$kids_kindergarden_share_2015 == 0] <- NA
+df.sel$model_lo <- factor(df.sel$model, levels = c("election", "contract", "competition"))
+
+
+```
+
+#dummmy
+```{r}
+# dummy for the program
+unique(df.sel$reg_name)
+
+df.sel$prog <- ifelse(
+                df.sel$reg_name == "Астраханская область" |
+                df.sel$reg_name == "Волгоградская область" |
+                df.sel$reg_name == "Воронежская область"|
+                df.sel$reg_name == "Иркутская область" |
+                df.sel$reg_name == "Калининградская область" |
+                df.sel$reg_name == "Кемеровская область" |
+                df.sel$reg_name == "Кировская область" |
+                df.sel$reg_name == "Краснодарский край" |
+                df.sel$reg_name == "Красноярский край" |
+                df.sel$reg_name == "Липецкая область" |
+                df.sel$reg_name == "Нижегородская область" |
+                df.sel$reg_name == "Республика Дагестан" |
+                df.sel$reg_name == "Республика Татарстан" |
+                df.sel$reg_name == "Новосибирская область" |
+                df.sel$reg_name == "Омская область" |
+                df.sel$reg_name == "Оренбургская область" |
+                df.sel$reg_name == "Пензенская область" |
+                df.sel$reg_name == "Пермский край" |
+                df.sel$reg_name == "Ростовская область" |
+                df.sel$reg_name == "Рязанская область" |
+                df.sel$reg_name == "Самарская область" |
+                df.sel$reg_name == "Саратовская область" |
+                df.sel$reg_name == "Томская область" |
+                df.sel$reg_name == "Тульская область" |
+                df.sel$reg_name == "Тюменская область (+ХМАО ЯНАО)" |
+                df.sel$reg_name == "Республика Бурятия" |
+                df.sel$reg_name == "Ульяновская область" |
+                df.sel$reg_name == "Республика Башкортостан" |
+                df.sel$reg_name == "Хабаровский край" |
+                df.sel$reg_name == "Республика Чувашия" |
+                df.sel$reg_name =="Челябинская область" |
+                df.sel$reg_name =="Ярославская область", 1, 0)
+
+table(df.sel$prog)
+```
+
+#Differences
+```{r}
+
+df.sel$broken_roads_diff <- df.sel$broken_roads_2018 / 100 - df.sel$broken_roads_2015 / 100
+
+df.sel$people_housing_improved_share_diff <- df.sel$people_housing_improved_share_2018 / 100 - df.sel$people_housing_improved_share_2015 / 100
+
+```
+#Inversions
+```{r}
+df.sel$broken_roads_2018 <- 100 - df.sel$broken_roads_2018 
+#df.sel$kindergardens_repair_2018 <- 100 - df.sel$kindergardens_repair_2018
+```
+#Subsetting
+```{r}
+cities <- df.sel %>%
+  filter(mun_type == "Urban districts")
+rayons <- df.sel %>%
+  filter(mun_type == "Municipal districts")
+
+```
+
+#Hist
+```{r}
+ggplot(data = df.sel, aes(x = broken_roads)) +
+  geom_histogram(na.rm = T, binwidth = 1) +
+  theme_minimal()
+
+
+ggplot(data = df.sel, aes(x = people_housing_log)) +
+  geom_histogram(na.rm = T) +
+  theme_minimal()
+
+
+ggplot(data = df.sel, aes(x = turnout2016)) +
+  geom_histogram(na.rm = T) +
+  theme_minimal()
+
+
+ggplot(data = df.sel, aes(x = kids_leisure_share)) +
+  geom_histogram(na.rm = T) +
+  theme_minimal()
+
+ggplot(data = df.sel, aes(x = good_roads)) +
+  geom_histogram(na.rm = T) +
+  theme_minimal()
+
+ggplot(data = df.sel, aes(x = log(UR_share))) +
+  geom_histogram(na.rm = T) +
+  theme_minimal()
+
+ggplot(data = df.sel, aes(x = log(waste_length))) +
+  geom_histogram(na.rm = T) +
+  theme_minimal()
+
+ggplot(data = df.sel, aes(x = log(gas_length))) +
+  geom_histogram(na.rm = T) +
+  theme_minimal()
+
+ggplot(data = df.sel, aes(x = broken_roads)) +
+  geom_histogram(na.rm = T) +
+  theme_minimal()
+
+```
+
+#Running models (housing)
+```{r}
+model0 <- lmer(people_housing_log ~ as.factor(mun_type) + UR_share + logpop + ENP_Golosov + model_lo + (1 | reg_eng), data = df.sel, REML = F)
+model1 <- lmer(people_housing_log ~ as.factor(mun_type) + logsubs + UR_share + logpop + ENP_Golosov + model_lo + (1 | reg_eng), data = df.sel, REML = F)
+model2 <- lmer(people_housing_log ~ as.factor(mun_type) + grat_ratio + UR_share + logpop + ENP_Golosov + model_lo + (1 | reg_eng), data = df.sel, REML = F)
+model3 <- lmer(people_housing_log ~ as.factor(mun_type)*UR_share + UR_share*grat_ratio + logsubs + ENP_Golosov + logpop + model_lo + (1 | reg_eng), data = df.sel, REML = F)
+
+tab_model(model0, model1, model2, model3)
+
+```
+
+
+# Broken roads
+```{r}
+
+model1_1 <- lmer(broken_roads ~ as.factor(mun_type) + logincome + UR_share + logpop + ENP_Golosov + model_lo + (1 | reg_eng), data = df.sel, REML = F)
+model1_2 <- lmer(broken_roads ~ as.factor(mun_type) + logsubs + UR_share + logpop + ENP_Golosov+ model_lo + (1 | reg_eng), data = df.sel, REML = F)
+model1_3 <- lmer(broken_roads ~ as.factor(mun_type) + grat_ratio + UR_share + logpop + ENP_Golosov + model_lo + (1 | reg_eng), data = df.sel, REML = F)
+model1_4 <- lmer(broken_roads ~ as.factor(mun_type) + grat_ratio*UR_share + logpop + ENP_Golosov + model_lo + (1 | reg_eng), data = df.sel, REML = F)
+
+tab_model(model1_1, model1_2, model1_3, model1_4)
+
+```
+
+#Kids leisure
+```{r}
+model2_1 <- lmer(kids_leisure_share ~ as.factor(mun_type) + logincome + UR_share + logpop + ENP_Golosov + model_lo + (1 | reg_eng), data = df.sel, REML = F)
+model2_2 <- lmer(kids_leisure_share ~ as.factor(mun_type) + logsubs + UR_share + logpop + ENP_Golosov + model_lo + (1 | reg_eng), data = df.sel, REML = F)
+model2_3 <- lmer(kids_leisure_share ~ as.factor(mun_type) + grat_ratio + UR_share + logpop + ENP_Golosov + model_lo + (1 | reg_eng), data = df.sel, REML = F)
+model2_4 <- lmer(kids_leisure_share ~ as.factor(mun_type) + grat_ratio*UR_share + logpop + ENP_Golosov + model_lo + (1 | reg_eng), data = df.sel, REML = F)
+
+tab_model(model2_1, model2_2, model2_3, model2_4)
+```
+
+#Kindergartens_repair
+```{r}
+model3_1 <- lmer(kindergardens_repair ~ as.factor(mun_type) + logincome + UR_share  + logpop + ENP_Golosov + model_lo + (1 | reg_eng), data = df.sel, REML = F)
+model3_2 <- lmer(kindergardens_repair ~ as.factor(mun_type) + logsubs + UR_share  + logpop + ENP_Golosov + model_lo + (1 | reg_eng), data = df.sel, REML = F)
+model3_3 <- lmer(kindergardens_repair ~ as.factor(mun_type) + grat_ratio + UR_share  + logpop + ENP_Golosov + model_lo + (1 | reg_eng), data = df.sel, REML = F)
+model3_4 <- lmer(kindergardens_repair ~ as.factor(mun_type) + grat_ratio*UR_share  + logpop + ENP_Golosov + model_lo + (1 | reg_eng), data = df.sel, REML = F)
+
+tab_model(model3_1, model3_2, model3_3, model3_4)
+```
+
+#Libraries
+```{r}
+model4_1 <- lmer(libraries ~ as.factor(mun_type) + logincome + UR_share  + logpop + ENP_Golosov + model_lo + (1 | reg_eng), data = df.sel, REML = F)
+model4_2 <- lmer(libraries ~ as.factor(mun_type) + logsubs + UR_share + logpop + ENP_Golosov + model_lo + (1 | reg_eng), data = df.sel, REML = F)
+model4_3 <- lmer(libraries ~ as.factor(mun_type) + grat_ratio + UR_share +  logpop + ENP_Golosov + model_lo + (1 | reg_eng), data = df.sel, REML = F)
+model4_4 <- lmer(libraries ~ as.factor(mun_type) + grat_ratio*UR_share + logpop + ENP_Golosov + model_lo + (1 | reg_eng), data = df.sel, REML = F)
+
+tab_model(model4_1, model4_2, model4_3, model4_4)
+```
+
+#Housing improved
+```{r}
+model5_1 <- lmer(people_housing_improved_share ~ as.factor(mun_type) + logincome + UR_share +  logpop + ENP_Golosov + model_lo + (1 | reg_eng), data = df.sel, REML = F)
+model5_2 <- lmer(people_housing_improved_share ~ as.factor(mun_type) + logsubs + UR_share +  logpop + ENP_Golosov + model_lo + (1 | reg_eng), data = df.sel, REML = F)
+model5_3 <- lmer(people_housing_improved_share ~ as.factor(mun_type) + grat_ratio + UR_share +  logpop + ENP_Golosov + model_lo + (1 | reg_eng), data = df.sel, REML = F)
+model5_4 <- lmer(people_housing_improved_share ~ as.factor(mun_type) + grat_ratio*UR_share +  logpop + ENP_Golosov + model_lo + (1 | reg_eng), data = df.sel, REML = F)
+
+tab_model(model5_1, model5_2, model5_3, model5_4)
+```
+
+#Water repair
+```{r}
+model6_1 <- lmer(water_repair ~ as.factor(mun_type) + logincome + UR_share +  logpop + ENP_Golosov + model_lo + (1 | reg_eng), data = df.sel, REML = F)
+model6_2 <- lmer(water_repair ~ as.factor(mun_type) + logsubs + UR_share + logpop + ENP_Golosov + model_lo + (1 | reg_eng), data = df.sel, REML = F)
+model6_3 <- lmer(water_repair ~ as.factor(mun_type) + grat_ratio + UR_share +  logpop + ENP_Golosov + model_lo + (1 | reg_eng), data = df.sel, REML = F)
+model6_4 <- lmer(water_repair ~ as.factor(mun_type) + grat_ratio*UR_share +  logpop + ENP_Golosov + model_lo + (1 | reg_eng), data = df.sel, REML = F)
+
+tab_model(model6_1, model6_2, model6_3, model6_4)
+```
+
+#Waste
+```{r}
+model7_1 <- lmer(waste_length ~ as.factor(mun_type) + logincome + UR_share +  logpop + ENP_Golosov + model_lo + (1 | reg_eng), data = df.sel, REML = F)
+model7_2 <- lmer(waste_length ~ as.factor(mun_type) + logsubs + UR_share +  logpop + ENP_Golosov + model_lo + (1 | reg_eng), data = df.sel, REML = F)
+model7_3 <- lmer(waste_length ~ as.factor(mun_type) + grat_ratio + UR_share +  logpop + ENP_Golosov + model_lo + (1 | reg_eng), data = df.sel, REML = F)
+model7_4 <- lmer(waste_length ~ as.factor(mun_type) + grat_ratio*UR_share +  logpop + ENP_Golosov + model_lo + (1 | reg_eng), data = df.sel, REML = F)
+
+tab_model(model7_1, model7_2, model7_3, model7_4)
+
+```
+
+#Gas
+```{r}
+model8_1 <- lmer(gas_length ~ as.factor(mun_type) + logincome + UR_share +  logpop + ENP_Golosov + model_lo + (1 | reg_eng), data = df.sel, REML = F)
+model8_2 <- lmer(gas_length ~ as.factor(mun_type) + logsubs + UR_share +  logpop + ENP_Golosov + model_lo + (1 | reg_eng), data = df.sel, REML = F)
+model8_3 <- lmer(gas_length ~ as.factor(mun_type) + grat_ratio + UR_share +  logpop + ENP_Golosov + model_lo + (1 | reg_eng), data = df.sel, REML = F)
+model8_4 <- lmer(gas_length ~ as.factor(mun_type) + grat_ratio*UR_share +  logpop + ENP_Golosov + model_lo + (1 | reg_eng), data = df.sel, REML = F)
+
+tab_model(model8_1, model8_2, model8_3, model8_4)
+```
+
+#Basic models - cities
+```{r}
+#model1 <- lmer(people_housing_log ~  logsubs + UR_share  + model_lo   + logincome + ENP_Golosov + logpop + (1 | reg_eng), data = cities, REML = F)
+model2 <- lmer(I(broken_roads_2018 / 100) ~   logsubs + grat_ratio + UR_share*prog + model_lo  + ENP_Golosov + logpop + (1 | reg_eng), data = cities, REML = F)
+model2_2017 <- lmer(I(broken_roads / 100) ~   logsubs + grat_ratio + UR_share*prog + model_lo   + ENP_Golosov + logpop + (1 | reg_eng), data = cities, REML = F)
+model2_a <- lmer(broken_roads_diff ~  logsubs + grat_ratio + UR_share*prog + model_lo  + ENP_Golosov + logpop + (1 | reg_eng), data = cities, REML = F)
+#model3 <- lmer(kids_leisure_share ~  logsubs + UR_share  + model_lo   + logincome + ENP_Golosov + logpop + (1 | reg_eng), data = cities, REML = F)
+#model4 <- lmer(kindergardens_repair_2018 ~  logsubs + grat_ratio + UR_share + model_lo   +  ENP_Golosov + logpop + (1 | reg_eng), data = cities, REML = F)
+#model4_2017 <- lmer(kindergardens_repair ~  logsubs + grat_ratio + UR_share + model_lo   +  ENP_Golosov + logpop + (1 | reg_eng), data = cities, REML = F)
+#model4_a <- lmer(kindergardens_repair_diff ~  logsubs + grat_ratio + UR_share + model_lo   +  ENP_Golosov + logpop + (1 | reg_eng), data = cities, REML = F)
+#model5 <- lmer(libraries ~  logsubs + UR_share  + model_lo   + logincome + ENP_Golosov + logpop + (1 | reg_eng), data = cities, REML = F)
+model6 <- lmer(log(1+(people_housing_improved_share_2018 / 100)) ~  logsubs  + grat_ratio + UR_share + model_lo   + ENP_Golosov + logpop + (1 | reg_eng), data = cities, REML = F)
+model6_2017 <- lmer(log(1+people_housing_improved_share) ~  logsubs  + grat_ratio + UR_share + model_lo   + ENP_Golosov + logpop + (1 | reg_eng), data = cities, REML = F)
+model6_a <- lm(people_housing_improved_share_diff ~  logsubs  + grat_ratio + UR_share + model_lo  + ENP_Golosov + logpop, data = cities)
+#model7 <- lmer(water_repair ~  water_repair_2015 + logsubs  + grat_ratio + UR_share  + model_lo   + logincome + ENP_Golosov + logpop + (1 | reg_eng), data = cities, REML = F)
+#model7_a <- lmer(water_repair ~  logsubs  + grat_ratio + UR_share  + model_lo   + logincome + ENP_Golosov + logpop + (1 | reg_eng), data = cities, REML = F)
+#model8 <- lmer(log(waste_length+1) ~  log(1 + waste_length_2015) + logsubs  + grat_ratio*UR_share  + model_lo   + logincome + ENP_Golosov + logpop + (1 | reg_eng), data = cities, REML = F)
+#model9 <- lmer(log(gas_length+1) ~  log(1 + gas_length_2015) + logsubs  + grat_ratio*UR_share  + model_lo   + logincome + ENP_Golosov + logpop + (1 | reg_eng), data = cities, REML = F)
+
+tab_model( model2, model2_2017, model2_a, model6, model6_2017, model6_a, p.style = "stars", show.ci = FALSE, p.threshold = c(0.10, 0.05, 0.01))
+
+
+```
+# Rayons
+```{r}
+#model1 <- lmer(people_housing_log ~  logsubs + UR_share  + model_lo   + logincome + ENP_Golosov + logpop + (1 | reg_eng), data =  rayons, REML = F)
+model2 <- lmer(I(broken_roads_2018 / 100) ~  logsubs + grat_ratio +  UR_share*prog  + model_lo   + ENP_Golosov + logpop + (1 | reg_eng), data =  rayons, REML = F)
+model2_2017r <- lmer(I(broken_roads / 100) ~  logsubs + grat_ratio +  UR_share*prog  + model_lo + ENP_Golosov + logpop + (1 | reg_eng), data =  rayons, REML = F)
+model2_b <- lmer(broken_roads_diff ~  logsubs + grat_ratio +  UR_share*prog  + model_lo + ENP_Golosov + logpop + (1 | reg_eng), data =  rayons, REML = F)
+#model3 <- lmer(kids_leisure_share ~  logsubs + UR_share  + model_lo   + logincome + ENP_Golosov + logpop + (1 | reg_eng), data =  rayons, REML = F)
+#model4 <- lmer(kindergardens_repair_2018 ~  logsubs + grat_ratio + UR_share  + model_lo   + ENP_Golosov + logpop + (1 | reg_eng), data =  rayons, REML = F)
+#model4_2017r <- lmer(kindergardens_repair ~  logsubs + grat_ratio + UR_share  + model_lo   + ENP_Golosov + logpop + (1 | reg_eng), data =  rayons, REML = F)
+#model4_b <- lmer(kindergardens_repair_diff ~  logsubs + grat_ratio + UR_share  + model_lo   + ENP_Golosov + logpop + (1 | reg_eng), data =  rayons, REML = F)
+#model5 <- lmer(libraries ~  logsubs + UR_share  + model_lo   + logincome + ENP_Golosov + logpop + (1 | reg_eng), data =  rayons, REML = F)
+model6 <- lmer(log(1+(people_housing_improved_share_2018 / 100)) ~  logsubs + grat_ratio + UR_share  + model_lo   + ENP_Golosov + logpop + (1 | reg_eng), data =  rayons, REML = F)
+model6_2017r <- lmer(log(1+(people_housing_improved_share / 100)) ~  logsubs + grat_ratio + UR_share  + model_lo   + ENP_Golosov + logpop + (1 | reg_eng), data =  rayons, REML = F)
+model6_b <- lmer(people_housing_improved_share_diff ~  logsubs + grat_ratio + UR_share  + model_lo   + ENP_Golosov + logpop + (1 | reg_eng), data =  rayons, REML = F)
+#model7 <- lmer(water_repair ~  logsubs + grat_ratio + UR_share  + model_lo   + logincome + ENP_Golosov + logpop + (1 | reg_eng), data =  rayons, REML = F)
+#model8 <- lmer(waste_length ~  logsubs + grat_ratio + UR_share  + model_lo   + logincome + ENP_Golosov + logpop + (1 | reg_eng), data =  rayons, REML = F)
+#model9 <- lmer(gas_length ~  logsubs + grat_ratio + UR_share  + model_lo   + logincome + ENP_Golosov + logpop + (1 | reg_eng), data =  rayons, REML = F)
+
+tab_model( model2, model2_2017, model2_b, model6, model6_2017, model6_b,  p.style = "stars", show.ci = FALSE, p.threshold = c(0.10, 0.05, 0.01))
+```
+
+#Descr
+```{r}
+# unbroken roads
+# Data
+data <- df.sel %>% select(mun_type, model_lo, broken_roads,  people_housing_improved_share) 
+head(data)
+# Calculates mean, sd, se and IC
+ my_sum <- data %>%
+   group_by(mun_type, model_lo) %>%
+   summarise( 
+     n=n(),
+     mean=mean(broken_roads, na.rm = TRUE),
+     sd=sd(broken_roads, na.rm = TRUE)
+   ) %>%
+  mutate( se=sd/sqrt(n))  %>%
+  mutate( ic=se * qt((1-0.05)/2 + .5, n-1))
+ my_sum <-na.omit(my_sum)
+ my_sum
+  
+# Confidence Interval
+gr1<- ggplot(my_sum) +
+ geom_bar( aes(x=mun_type, y=mean, fill = model_lo), position = "dodge", stat="identity", show.legend=FALSE) +
+ geom_errorbar(  position = position_dodge(), aes(x=mun_type, ymin=mean-ic, ymax=mean+ic, fill = model_lo)) +
+ ggtitle("% of repaired roads") +
+ labs (y = "Median value", x = "Selection model") +
+ scale_fill_grey(start = 0.25, end = 0.75) +
+ theme_classic()+
+  theme(
+    text = element_text(family = "Arial", color = "grey20"),
+    strip.background = element_blank(),
+    strip.text = element_text(hjust = 0))
+gr1
+#--------------------------------------------------------------------------
+# housing
+# Calculates mean, sd, se and IC
+ my_sum <- data %>%
+   group_by(mun_type, model_lo) %>%
+   summarise( 
+     n=n(),
+     mean=mean(people_housing_improved_share, na.rm = T),
+     sd=sd(people_housing_improved_share, na.rm = TRUE)
+   ) %>%
+  mutate( se=sd/sqrt(n))  %>%
+  mutate( ic=se * qt((1-0.05)/2 + .5, n-1))
+ my_sum <-na.omit(my_sum)
+  
+# Confidence Interval
+gr3<- ggplot(my_sum) +
+ geom_bar( aes(x=mun_type, y=mean, fill = model_lo), position = "dodge", stat="identity", show.legend=FALSE) +
+ geom_errorbar(  position = position_dodge(), aes(x=mun_type, ymin=mean-ic, ymax=mean+ic, fill = model_lo)) +
+ ggtitle("% of people improved their housing") +
+ scale_y_log10() +
+ labs (y = "Median value", x = "Selection model") +
+ scale_fill_grey(start = 0.25, end = 0.75) +
+ theme_classic()
+```
+
+# Selection models
+```{r}
+
+prop.table(table(data$model_lo, data$mun_type),2)
+
+```
+
+
+```{r}
+#Sys.setenv(R_GSCMD="C:/Program Files/gs/gs9.05/bin/gswin32c.exe")
+#library(extrafontdb)
+#library(Rttf2pt1)
+#library(extrafont)
+
+font_import()
+loadfonts(device = "win")
+
+windowsFonts()
+
+
+
+gr1 + theme(legend.position = "bottom") + theme(text=element_text(family="TT Times New Roman"))
+gr3 + theme(legend.position = "bottom") + scale_y_log10() + theme(text=element_text(family="TT Times New Roman"))
+grid.arrange(gr1,  gr3, ncol = 2)
+
+```
+
+#effects
+```{r}
+# Predicted values (marginal effects) for specific model terms.
+ame1 <- plot_model(model2_2017, type = "pred", ci.lvl = 0.90, terms = c("UR_share", "prog[0,1]"), 
+       title = "", axis.title = "Quality of local roads", legend.title = "Federal program" )
+ame1
+
+ame2 <- plot_model(model2, type = "pred", ci.lvl = 0.90, terms = c("UR_share", "prog[0,1]"), 
+       title = "", axis.title = "Quality of local roads", legend.title = "Federal program" )
+ame2
+grid.arrange(ame1,  ame2,  ncol = 2, top = "Predictive margins")
+
+plot_models(model2_2017, model2, ci.lvl = 0.90 )
+
+```
+
+```{r}
+# Predicted values (marginal effects) for specific model terms.
+ame1<-plot_model(model2_2017, type = "pred", terms = c("grat_ratio"),
+           colors = "black", axis.title = "")
+#ame2<-plot_model(model4_2017, type = "pred", terms = c("grat_ratio"),
+         # title = "% of kindergardens repaired", colors = "black", axis.title = "" )
+ame3<-plot_model(model6_2017, type = "pred", terms = c("grat_ratio"),
+           colors = "black", axis.title = "" )
+ame4<-plot_model(model2_2017r, type = "pred", terms = c("grat_ratio"),
+            colors = "black", axis.title = "" )
+#ame5<-plot_model(model4_2017r, type = "pred", terms = c("grat_ratio"),
+         #  colors = "black", axis.title = "", title = "" )
+ame6<-plot_model(model6_2017r, type = "pred", terms = c("grat_ratio"),
+          colors = "black", axis.title = "" )
+grid.arrange(ame1,  ame3, ame4, ame6, ncol = 2, top = "Predictive margins")
+```
+#Differences
+```{r}
+p1 <- plot_models(model2_a,  model6_a, auto.label = T)
+p3 <- plot_models(model2_2017r, model6_2017r)
+p1
+p3
+#grid.arrange(p1, p2, p3)
+
+```
+
+#Time series alternative data
+```{r}
+full.df <- read.csv("bdmo_2008-2017_clean_long_ansi.csv", header = T, sep = ";", dec = ",")
+names(full.df)
+
+ts <- full.df %>%
+  select(oktmo, year, mun_type, broken_roads, kindergardens_repair, people_housing_improved_share) %>%
+  arrange(order(year)) %>%
+  group_by(year, mun_type) %>%
+  summarise(median_roads = median(broken_roads, na.rm = T),
+           # mean_kind = mean(kindergardens_repair, na.rm = T),
+            median_housing = median(people_housing_improved_share, na.rm = T))
+ts<-ts[!(ts$mun_type=="ict"),]
+ts<-na.omit(ts)
+ts
+
+```
+
+# Plotting time series for dvs
+```{r}
+library(gridExtra)
+desc1 <- ggplot(ts, aes(x = as.factor(year), y = median_roads, fill = mun_type)) + 
+    geom_bar(stat='identity', position = "dodge") +
+  labs(x = "Year", y = "% of roads repaired") +
+  scale_fill_grey(start = 0.25, end = 0.75) +
+  theme_bw() +
+  labs(fill = "Selection model") + theme(axis.text.x = element_text(angle = 60, hjust = 1))
+
+#desc2 <- ggplot(ts, aes(x = as.factor(year), y = mean_kind, fill = mun_type)) + 
+#    geom_bar(stat='identity', position = "dodge") +
+#  labs(x = "Year", y = "% of kindergardens repaired") +
+#  scale_fill_grey(start = 0.25, end = 0.75) +
+#  theme_bw() +
+#  labs(fill = "Selection model") +theme(axis.text.x = element_text(angle = 60, hjust = 1))
+
+desc3 <- ggplot(ts, aes(x = as.factor(year), y = median_housing, fill = mun_type)) + 
+    geom_bar(stat='identity', position = "dodge") +
+  labs(x = "Year", y = "% of housing improved") +
+  scale_fill_grey(start = 0.25, end = 0.75) +
+  theme_bw() +
+  labs(fill = "Selection model") + theme(axis.text.x = element_text(angle = 60, hjust = 1))
+grid.arrange(desc1, desc3, ncol = 2)
+
+```
+
+#Freaky kindergardens...
+```{r}
+#install.packages("DescTools")
+#library(DescTools)
+hist(Winsorize(df.sel$kindergardens_repair, na.rm = T))
+
+df.sel$kind100 <- ifelse(df.sel$kindergardens_repair == 100, 1, 0)
+
+table(df.sel$kind100)
+table(df.sel$fd)
+tab_model(mod <- glm(kind100 ~ fd + mun_type + model_lo + UR_share, data = df.sel, family = "binomial"))
+
+```
+
+# Labels
+```{r}
+#install.packages("Hmisc")
+library(Hmisc)
+
+label(df.sel$broken_roads) <- "% of roads repaired in 2017"
+label(df.sel$broken_roads_2018) <- "% of roads repaired in 2018"
+label(df.sel$broken_roads_diff) <- "% of roads repaired, change 2015"
+
+label(df.sel$people_housing_improved_share) <- "% of housing improved in 2017"
+label(df.sel$people_housing_improved_share_2018) <- "% of housing improved in 2018"
+label(df.sel$people_housing_improved_share_diff) <- "% of housing improved, change 2015"
+
+label(df.sel$logsubs) <- "Subsidies (logged)"
+label(df.sel$grat_ratio) <- "Income ratio"
+label(df.sel$UR_share) <- "% for the United Russia"
+label(df.sel$model_lo) <- "Selection model"
+label(df.sel$ENP_Golosov) <- "ENPP"
+label(df.sel$logpop) <- "Population (logged)"
+label(df.sel$reg_eng) <- "Region"
+label(df.sel$mun_type) <- "Type of municipality"
+label(df.sel$prog) <- "Participation in the federal program"
+```
+
+#Prop tables
+```{r}
+tab <- with(df.sel, table(mun_type, model_lo))
+prop.table(tab, margin = 1)*100
+table(df.sel$mun_type, df.sel$model_lo)
+
+```
+
+
+#Scatter plots
+```{r}
+
+sp1 <- ggplot(df.sel, aes(x = UR_share, y = broken_roads_2018, shape = mun_type)) +
+    geom_point(aes(color = mun_type), size = 1.5)+
+    labs(x = "% of votes for the United Russia", y = "% of roads mended") +
+    geom_smooth(method = lm, color = "black") + theme_bw() + theme(legend.position = "bottom",
+          legend.direction = "horizontal") + theme(legend.title=element_blank()) 
+
+
+sp2 <- ggplot(df.sel, aes(x = UR_share, y = people_housing_improved_share_2018, shape = mun_type)) +
+    geom_point(aes(color = mun_type), size = 1.5)+
+    labs(x = "% of votes for the United Russia", y = "% of people who improved their housing conditions") +
+    scale_fill_grey(start = 0.25, end = 0.75) +
+    scale_y_log10()+
+    geom_smooth(method = lm, color = "black") + theme_bw() + theme(legend.position = "bottom",
+          legend.direction = "horizontal") + theme(legend.title=element_blank()) 
+# to add 
+grid.arrange(sp1, sp2, ncol = 2)
+
+
+ggplot(df.sel, aes( x = grat_ratio, y = people_housing_improved_share, color = mun_type)) +
+  geom_point(aes(color = mun_type)) +
+  geom_smooth(method = lm)
+
+
+sp3 <- ggplot(df.sel, aes(x = grat_ratio, y = broken_roads_2018, shape = mun_type)) +
+    geom_point(aes(color = mun_type), size = 1.5)+
+    labs(x = "Earned income (ratio) logged", y = "% of roads mended") +
+    scale_x_log10() +
+    geom_smooth(method = lm, color = "black") + theme_bw() + theme(legend.position = "bottom",
+          legend.direction = "horizontal") + theme(legend.title=element_blank()) + scale_color_grey()
+
+
+sp4 <- ggplot(df.sel, aes(x = grat_ratio, y = people_housing_improved_share_2018, shape = mun_type)) +
+    geom_point(aes(color = mun_type), size = 1.5)+
+    labs(x = "Earned income (ratio) logged", y = "% of people who improved their housing conditions (logged)") +
+    scale_fill_grey(start = 0.25, end = 0.75) +
+    scale_y_log10()+
+    scale_x_log10()+
+    geom_smooth(method = lm, color = "black") + theme_bw() + theme(legend.position = "bottom",
+          legend.direction = "horizontal") + theme(legend.title=element_blank()) +scale_color_grey()
+# to add scale_color_grey to turn points bw
+grid.arrange(sp3, sp4, ncol = 2)
+```
+
+#descr table
+```{r}
+
+ggplot(df.sel, aes(y = broken_roads_2018, x = as.factor(prog))) +
+  geom_boxplot()
+
+tab_model(glm(prog ~ UR_share + broken_roads_2015  + model_lo, data = cities, family = binomial), p.style = "stars", show.ci = FALSE, p.threshold = c(0.10, 0.05, 0.01))
+
+
+list
+
+
+library(corrplot)
+num_cols <- unlist(lapply(df.sel, is.numeric))
+num_cols
+data_num <- df.sel[ , num_cols]
+data_num  
+
+#corrplot(data_num, method = "circle", use = "pairwise.complete.obs")
+cor(data_num, use = "pairwise.complete.obs")
+
+library(corrr)
+data_num %>%
+    correlate(data_num, use = "pairwise.complete.obs") %>% 
+    stretch() %>% 
+    arrange(r)
+
+```
+
+```{r}
+library(stargazer)
+library(dplyr)
+library(tidyr)
+
+
+df.sel %>%
+    select(mun_type, broken_roads, broken_roads_2018, people_housing_improved_share, people_housing_improved_share_2018, grat_ratio, logsubs, UR_share, ENP_Golosov) %>%
+    group_by(mun_type) %>%
+    mutate(id = 1:n()) %>%
+    ungroup() %>%
+    gather(temp, val, broken_roads, broken_roads_2018, people_housing_improved_share, people_housing_improved_share_2018, grat_ratio, logsubs, UR_share, ENP_Golosov) %>%
+    unite(temp1, mun_type, temp, sep = '_') %>%
+    spread(temp1, val) %>%
+    select(-id) %>%
+    as.data.frame() %>%
+    stargazer(type = 'text', out = "test.html")
+
+
+
+test <- df.sel %>%
+    select(reg_eng, mun_type, broken_roads) %>%
+    group_by(reg_eng) %>%
+    summarise(
+      n = n(),
+      mean1 = mean(as.integer(broken_roads), na.rm = T),
+      median1 = median(as.integer(broken_roads), na.rm = T),
+      sd1 = sd(as.integer(broken_roads), na.rm = T),
+      min = min(as.integer(broken_roads), na.rm = T),
+      max = max(as.integer(broken_roads), na.rm = T) %>%
+      as.data.frame()
+    ) 
+test
+#write_csv(test, file == "test.csv")
+
+```
